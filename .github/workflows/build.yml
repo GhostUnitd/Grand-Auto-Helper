@@ -1,23 +1,38 @@
+
 name: Build APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Unpack project
+      - name: Unpack Android project
         run: |
-          unzip -q GrandAutoHelper_project.zip -d build-source
+          if [ ! -f GrandAutoHelper_project.zip ]; then
+            echo "ERROR: GrandAutoHelper_project.zip not found!"
+            exit 1
+          fi
+
+          mkdir -p build-source
+          unzip -oq GrandAutoHelper_project.zip -d build-source
+
           PROJECT_DIR=$(find build-source -name settings.gradle.kts -printf '%h\n' | head -n 1)
-          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: settings.gradle.kts not found!"
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -30,6 +45,11 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Fix Java and Kotlin versions
+        run: |
+          sed -i 's/VERSION_1_8/VERSION_17/g' "$PROJECT_DIR/app/build.gradle.kts"
+          sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' "$PROJECT_DIR/app/build.gradle.kts"
+
       - name: Build APK
         run: gradle -p "$PROJECT_DIR" assembleDebug
 
@@ -38,3 +58,5 @@ jobs:
         with:
           name: GrandAutoHelper-debug
           path: build-source/**/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          
